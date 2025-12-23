@@ -122,19 +122,23 @@ if uploaded_file:
                 
                 # Generate and Send
                 img_data = generate_ai_image_bytes(gemini_key, prompt)
-                success = send_o365_email(
-                    sender_email, 
-                    app_password, 
-                    target, 
-                    subject_temp.format(**row), 
-                    body_temp.format(**row),
-                    manual_file=manual_attachment,
-                    ai_img_bytes=img_data
-                )
+                # 2. Send Email
+                formatted_subject = email_subject.replace("{Business Name}", biz_name)
+                formatted_body = email_body.replace("{Business Name}", biz_name)
+                    
+                    
+                success = send_automated_email_o365(
+                        sender_email,
+                        app_password,
+                        target_email,
+                        formatted_subject,
+                        formatted_body,
+                        attachment_path=row.get('File') # Optional file column
+                    )
                 
                 if success:
                     st.write(f"✅ Sent to {biz_name}")
                 
                 progress.progress((i + 1) / len(df))
-                
+
             st.balloons()
