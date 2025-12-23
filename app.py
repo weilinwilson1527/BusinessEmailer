@@ -1,36 +1,37 @@
 import streamlit as st
 import pandas as pd
 import smtplib
-import os
-import google.generativeai as genai
-from email.message import EmailMessage
-from PIL import Image
 import io
+import os
+from email.message import EmailMessage
+import google.generativeai as genai
 
-# --- 1. AI Image Generation (Gemini/Imagen) ---
+# --- 1. AI Image Generation Fix ---
 def generate_ai_image_bytes(api_key, prompt):
     try:
         genai.configure(api_key=api_key)
-        # Using the standard Imagen model name for Gemini 2025
-        model = genai.GenerativeModel('gemini-2.5-flash-image') 
+        # 2025 Standard: Using imagen-3.0 for dedicated image generation
+        model = genai.GenerativeModel('imagen-3.0-generate-001') 
         result = model.generate_content(prompt)
         
-        # Get the image bytes from the response
-        image_bytes = result.candidates[0].content.parts[0].inline_data.data
-        return image_bytes
+        # FIX: Explicitly extracting bytes from the Gemini response candidates
+        if result.candidates and result.candidates[0].content.parts:
+            image_bytes = result.candidates[0].content.parts[0].inline_data.data
+            return image_bytes
+        return None
     except Exception as e:
-        st.error(f"AI Image Error: {e}")
+        st.error(f"AI Generation Error: {e}")
         return None
 
-# --- 2. Email Setup (FIXED VERSION) ---
-def send_automated_email_o365(sender, password, receiver, subject, body, manual_file=None, ai_img_bytes=None):
+# --- 2. Office 365 Email Fix ---
+def send_o365_email(sender, password, receiver, subject, body, manual_file=None, image_data=None, image_name="visual.png"):
     msg = EmailMessage()
     msg['Subject'] = subject
     msg['From'] = sender
     msg['To'] = receiver
     msg.set_content(body)
 
-    # Attach the Manual File
+    # Attach the primary file (PDF/Document)
     if manual_file is not None:
         msg.add_attachment(
             manual_file.getvalue(),
@@ -39,13 +40,15 @@ def send_automated_email_o365(sender, password, receiver, subject, body, manual_
             filename=manual_file.name
         )
 
-    # Attach the AI Generated Image (Now correctly receiving ai_img_bytes)
-    if ai_img_bytes is not None:
+    # Attach the Image (Manual OR AI)
+    if image_data is not None:
+        # If it's a file uploader object, get value. If it's bytes (AI), use directly.
+        final_img_bytes = image_data.getvalue() if hasattr(image_data, 'getvalue') else image_data
         msg.add_attachment(
-            ai_img_bytes,
+            final_img_bytes,
             maintype='image',
             subtype='png',
-            filename='personalized_image.png'
+            filename=image_name
         )
 
     try:
@@ -56,92 +59,90 @@ def send_automated_email_o365(sender, password, receiver, subject, body, manual_
             smtp.send_message(msg)
         return True
     except Exception as e:
-        st.error(f"Email Failed for {receiver}: {e}")
+        st.error(f"Failed to send to {receiver}: {e}")
         return False
 
-# --- 3. Streamlit Interface ---
-st.set_page_config(page_title="Pro Outreach Automator", layout="centered")
-st.title("🚀 AI Business Outreach Dashboard")
+# --- 3. Streamlit UI ---
+st.set_page_config(page_title="Outreach Master", layout="wide")
+st.title("📧 Business Outreach (O365 + AI/Manual)")
 
 with st.sidebar:
-    st.header("🔑 Settings")
+    st.header("🔑 Credentials")
     sender_email = st.text_input("Office 365 Email")
-    app_password = st.text_input("Email Password", type="password")
+    app_password = st.text_input("App Password", type="password")
     gemini_key = st.text_input("Gemini API Key", type="password")
-    st.info("Get your key at aistudio.google.com")
 
-st.header("1. Upload Your Business List")
-uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-manual_attachment = st.file_uploader("Attach a file (PDF, Brochure, etc.)", type=["pdf", "png", "jpg", "docx"])
+# --- Step 1: Uploads ---
+col1, col2 = st.columns(2)
+with col1:
+    uploaded_csv = st.file_uploader("1. Upload Business List (CSV)", type=["csv"])
+with col2:
+    manual_doc = st.file_uploader("2. Attach Brochure/PDF (Optional)", type=["pdf", "docx"])
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    st.write("### Business List", df.head(3))
+# --- Step 2: Image Selection Strategy ---
+st.header("3. Visual Strategy")
+image_mode = st.radio("How would you like to handle the image?", 
+                      ["Generate Unique AI Image for each", "Upload ONE Static Image for all", "No Image"])
 
-    st.header("2. Customize Messaging")
-    email_subject = st.text_input("Subject line", "A gift for {Business Name}")
-    email_body = st.text_area("Message Body", "Hi {Business Name}, we generated this custom visual for you!")
+static_image = None
+if image_mode == "Upload ONE Static Image for all":
+    static_image = st.file_uploader("Upload the image to send", type=["png", "jpg", "jpeg"])
 
+if uploaded_csv:
+    df = pd.read_csv(uploaded_csv)
+    st.dataframe(df.head(3))
+
+    subject_temp = st.text_input("Subject line", "A gift for {Business Name}")
+    body_temp = st.text_area("Message body", "Hi {Business Name}, please see the attached visual!")
+
+    # --- PREVIEW ---
     st.divider()
-    st.subheader("👁️ Preview & Double Check")
+    if st.button("👁️ Preview First Email"):
+        row = df.iloc[0]
+        biz = row.get('Business Name', 'Client')
+        
+        # Determine preview image
+        preview_img = None
+        if image_mode == "Generate Unique AI Image for each":
+            prompt = row.get('Prompt', f"Professional marketing image for {biz}")
+            with st.spinner("AI is painting..."):
+                preview_img = generate_ai_image_bytes(gemini_key, prompt)
+        elif image_mode == "Upload ONE Static Image for all":
+            preview_img = static_image
 
-    if st.button("👀 Preview Email Content"):
-        if not gemini_key:
-            st.error("Please enter your Gemini API Key in the sidebar first!")
+        # Show Preview
+        if preview_img:
+            st.image(preview_img, caption=f"Visual for {biz}", width=400)
+            st.success("Preview Loaded!")
         else:
-            first_row = df.iloc[0]
-            # Handle potential missing columns gracefully
-            biz_name = first_row.get('Business Name', 'Valued Customer')
-            preview_prompt = first_row.get('Prompt', f"A professional photo for {biz_name}")
-            
-            with st.spinner("Generating AI image for preview..."):
-                img_bytes = generate_ai_image_bytes(gemini_key, preview_prompt)
-                if img_bytes:
-                    st.image(img_bytes, caption=f"AI Image for {biz_name}", width=400)
-                    st.info(f"Email will be sent to: {first_row.get('Email', 'No Email Found')}")
-                    st.success("Preview generated! If this looks good, click 'Start Bulk Sending' below.")
+            st.warning("No image to display in preview.")
 
-    st.divider()
-    if st.button("🚀 Start Bulk Sending", type="primary"):
-        if not (sender_email and app_password and gemini_key):
-            st.error("Missing credentials in the sidebar.")
+    # --- BULK RUN ---
+    if st.button("🚀 START CAMPAIGN", type="primary"):
+        if not (sender_email and app_password):
+            st.error("Enter email credentials!")
         else:
-            progress = st.progress(0)
-            status_text = st.empty()
-            
+            bar = st.progress(0)
             for i, row in df.iterrows():
-                biz_name = str(row.get('Business Name', 'Client'))
+                biz = str(row.get('Business Name', 'Client'))
                 target = str(row.get('Email', ''))
                 
-                if not target or "@" not in target:
-                    st.warning(f"Skipping {biz_name}: Invalid Email")
-                    continue
+                # Get Image for this specific row
+                current_img = None
+                if image_mode == "Generate Unique AI Image for each":
+                    current_img = generate_ai_image_bytes(gemini_key, row.get('Prompt', f"Photo for {biz}"))
+                elif image_mode == "Upload ONE Static Image for all":
+                    current_img = static_image
 
-                prompt = row.get('Prompt', f"Professional marketing visual for {biz_name}")
-                status_text.text(f"Sending to {biz_name}...")
+                # Send
+                success = send_o365_email(
+                    sender_email, app_password, target,
+                    subject_temp.replace("{Business Name}", biz),
+                    body_temp.replace("{Business Name}", biz),
+                    manual_file=manual_doc,
+                    image_data=current_img
+                )
                 
-                # 1. Generate Image
-                img_data = generate_ai_image_bytes(gemini_key, prompt)
-                
-                # 2. Personalize Text
-                formatted_subject = email_subject.replace("{Business Name}", biz_name)
-                formatted_body = email_body.replace("{Business Name}", biz_name)
-                
-                # 3. Send (All 7 arguments now match the function definition)
-                success = send_automated_email_o365(
-                        sender_email,
-                        app_password,
-                        target,
-                        formatted_subject,
-                        formatted_body,
-                        manual_file=manual_attachment,
-                        ai_img_bytes=img_data
-                    )
-                
-                if success:
-                    st.toast(f"✅ Sent to {biz_name}")
-                
-                progress.progress((i + 1) / len(df))
-
-            status_text.text("Bulk sending complete!")
+                if success: st.toast(f"Sent: {biz}")
+                bar.progress((i + 1) / len(df))
             st.balloons()
