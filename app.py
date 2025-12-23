@@ -15,10 +15,10 @@ def generate_ai_image_bytes(api_key, prompt):
         result = model.generate_content(prompt)
         
         # FIX: Explicitly extracting bytes from the Gemini response candidates
-        if result.candidates and result.candidates[0].content.parts:
-            image_bytes = result.candidates[0].content.parts[0].inline_data.data
-            return image_bytes
-        return None
+        # if result.candidates and result.candidates[0].content.parts:
+        image_bytes = result.candidates[0].content.parts[0].inline_data.data
+        return image_bytes
+        # return None
     except Exception as e:
         st.error(f"AI Generation Error: {e}")
         return None
