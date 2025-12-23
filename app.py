@@ -133,7 +133,8 @@ if uploaded_file:
                         target,
                         formatted_subject,
                         formatted_body,
-                        attachment_path=row.get('File') # Optional file column
+                        manual_file=manual_attachment,
+                        ai_img_bytes=img_data
                     )
                 
                 if success:
