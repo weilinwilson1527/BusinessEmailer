@@ -12,7 +12,7 @@ def generate_ai_image_bytes(api_key, prompt):
     try:
         genai.configure(api_key=api_key)
         # Using the standard Imagen model name for Gemini 2025
-        model = genai.GenerativeModel('imagen-3.0-generate-001') 
+        model = genai.GenerativeModel('gemini-2.5-flash-image') 
         result = model.generate_content(prompt)
         
         # Get the image bytes from the response
