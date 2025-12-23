@@ -27,7 +27,7 @@ def generate_ai_image_bytes(api_key, prompt):
         return None
 
 # --- 2. Email Setup ---
-def send_automated_email_o365(sender, password, receiver, subject, body, attachment_path=None):
+def send_automated_email_o365(sender, password, receiver, subject, body, manual_file=None):
     msg = EmailMessage()
     msg['Subject'] = subject
     msg['From'] = sender
