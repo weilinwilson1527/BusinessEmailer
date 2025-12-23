@@ -9,14 +9,10 @@ import io
 
 # --- 1. AI Image Generation (Gemini/Imagen) ---
 def generate_ai_image_bytes(api_key, prompt):
-    """
-    Generates an image and returns the bytes so we can 
-    display it in Streamlit and attach it to an email.
-    """
     try:
         genai.configure(api_key=api_key)
-        # Using the Imagen model (Note: Ensure your API key has Imagen 3 access)
-        model = genai.GenerativeModel('gemini-2.5-flash-image') 
+        # Using the standard Imagen model name for Gemini 2025
+        model = genai.GenerativeModel('imagen-3.0-generate-001') 
         result = model.generate_content(prompt)
         
         # Get the image bytes from the response
@@ -26,15 +22,15 @@ def generate_ai_image_bytes(api_key, prompt):
         st.error(f"AI Image Error: {e}")
         return None
 
-# --- 2. Email Setup ---
-def send_automated_email_o365(sender, password, receiver, subject, body, manual_file=None):
+# --- 2. Email Setup (FIXED VERSION) ---
+def send_automated_email_o365(sender, password, receiver, subject, body, manual_file=None, ai_img_bytes=None):
     msg = EmailMessage()
     msg['Subject'] = subject
     msg['From'] = sender
     msg['To'] = receiver
     msg.set_content(body)
 
-    # Attach the Manual File (Uploaded via Dashboard)
+    # Attach the Manual File
     if manual_file is not None:
         msg.add_attachment(
             manual_file.getvalue(),
@@ -43,7 +39,7 @@ def send_automated_email_o365(sender, password, receiver, subject, body, manual_
             filename=manual_file.name
         )
 
-    # Attach the AI Generated Image
+    # Attach the AI Generated Image (Now correctly receiving ai_img_bytes)
     if ai_img_bytes is not None:
         msg.add_attachment(
             ai_img_bytes,
@@ -52,7 +48,6 @@ def send_automated_email_o365(sender, password, receiver, subject, body, manual_
             filename='personalized_image.png'
         )
 
-    # Connect to Office 365
     try:
         with smtplib.SMTP('smtp.office365.com', 587) as smtp:
             smtp.ehlo()
@@ -75,58 +70,64 @@ with st.sidebar:
     gemini_key = st.text_input("Gemini API Key", type="password")
     st.info("Get your key at aistudio.google.com")
 
-# 1. Upload Business Info
 st.header("1. Upload Your Business List")
 uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-
-# 2. Upload Attachment Manually
 manual_attachment = st.file_uploader("Attach a file (PDF, Brochure, etc.)", type=["pdf", "png", "jpg", "docx"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    # st.dataframe(df)
     st.write("### Business List", df.head(3))
 
     st.header("2. Customize Messaging")
     email_subject = st.text_input("Subject line", "A gift for {Business Name}")
     email_body = st.text_area("Message Body", "Hi {Business Name}, we generated this custom visual for you!")
 
-    # --- PREVIEW SECTION ---
     st.divider()
     st.subheader("👁️ Preview & Double Check")
 
-
     if st.button("👀 Preview Email Content"):
-        first_row = df.iloc[0]
-        preview_prompt = first_row.get('Prompt', f"A professional photo for {first_row['Business Name']}")
-        
-        with st.spinner("Generating AI image for preview..."):
-            img_bytes = generate_ai_image_bytes(gemini_key, preview_prompt)
-            if img_bytes:
-                st.image(img_bytes, caption=f"AI Image for {first_row['Business Name']}", width=400)
-                st.info(f"Email will be sent to: {first_row['Email']}")
-                st.success("Preview generated! If this looks good, click 'Start Bulk Sending' below.")
+        if not gemini_key:
+            st.error("Please enter your Gemini API Key in the sidebar first!")
+        else:
+            first_row = df.iloc[0]
+            # Handle potential missing columns gracefully
+            biz_name = first_row.get('Business Name', 'Valued Customer')
+            preview_prompt = first_row.get('Prompt', f"A professional photo for {biz_name}")
+            
+            with st.spinner("Generating AI image for preview..."):
+                img_bytes = generate_ai_image_bytes(gemini_key, preview_prompt)
+                if img_bytes:
+                    st.image(img_bytes, caption=f"AI Image for {biz_name}", width=400)
+                    st.info(f"Email will be sent to: {first_row.get('Email', 'No Email Found')}")
+                    st.success("Preview generated! If this looks good, click 'Start Bulk Sending' below.")
 
-    # --- BULK SENDING ---
     st.divider()
     if st.button("🚀 Start Bulk Sending", type="primary"):
         if not (sender_email and app_password and gemini_key):
             st.error("Missing credentials in the sidebar.")
         else:
             progress = st.progress(0)
+            status_text = st.empty()
+            
             for i, row in df.iterrows():
-                # Personalize
-                biz_name = str(row['Business Name'])
-                target = str(row['Email'])
-                prompt = row.get('Prompt', f"Professional marketing visual for {biz_name}")
+                biz_name = str(row.get('Business Name', 'Client'))
+                target = str(row.get('Email', ''))
                 
-                # Generate and Send
+                if not target or "@" not in target:
+                    st.warning(f"Skipping {biz_name}: Invalid Email")
+                    continue
+
+                prompt = row.get('Prompt', f"Professional marketing visual for {biz_name}")
+                status_text.text(f"Sending to {biz_name}...")
+                
+                # 1. Generate Image
                 img_data = generate_ai_image_bytes(gemini_key, prompt)
-                # 2. Send Email
+                
+                # 2. Personalize Text
                 formatted_subject = email_subject.replace("{Business Name}", biz_name)
                 formatted_body = email_body.replace("{Business Name}", biz_name)
-                    
-                    
+                
+                # 3. Send (All 7 arguments now match the function definition)
                 success = send_automated_email_o365(
                         sender_email,
                         app_password,
@@ -138,8 +139,9 @@ if uploaded_file:
                     )
                 
                 if success:
-                    st.write(f"✅ Sent to {biz_name}")
+                    st.toast(f"✅ Sent to {biz_name}")
                 
                 progress.progress((i + 1) / len(df))
 
+            status_text.text("Bulk sending complete!")
             st.balloons()
