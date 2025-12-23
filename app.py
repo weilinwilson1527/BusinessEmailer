@@ -16,7 +16,7 @@ def generate_ai_image_bytes(api_key, prompt):
     try:
         genai.configure(api_key=api_key)
         # Using the Imagen model (Note: Ensure your API key has Imagen 3 access)
-        model = genai.GenerativeModel('imagen-3.0-generate-001') 
+        model = genai.GenerativeModel('gemini-2.5-flash-image') 
         result = model.generate_content(prompt)
         
         # Get the image bytes from the response
@@ -130,7 +130,7 @@ if uploaded_file:
                 success = send_automated_email_o365(
                         sender_email,
                         app_password,
-                        target_email,
+                        target,
                         formatted_subject,
                         formatted_body,
                         attachment_path=row.get('File') # Optional file column
