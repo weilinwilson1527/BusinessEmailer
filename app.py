@@ -96,7 +96,7 @@ if uploaded_file:
     st.subheader("👁️ Preview & Double Check")
 
 
-    if st.button("🚀 Start Bulk Emailing"):
+    if st.button("👀 Preview Email Content"):
         first_row = df.iloc[0]
         preview_prompt = first_row.get('Prompt', f"A professional photo for {first_row['Business Name']}")
         
