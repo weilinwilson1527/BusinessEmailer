@@ -4,22 +4,9 @@ import smtplib
 import os
 import google.generativeai as genai
 from email.message import EmailMessage
-from PIL import Image
-import io
 
-# --- 1. AI Setup (Gemini) ---
-def generate_business_image(api_key, prompt_text):
-    """Uses Gemini to generate an image based on the business prompt."""
-    genai.configure(api_key=api_key)
-    # Using the Imagen model via Gemini API
-    model = genai.GenerativeModel('gemini-1.5-flash') 
-    # Note: For actual image generation, ensure your API has 'imagen-3' access
-    # This is a placeholder for the generation call
-    response = model.generate_content(f"Generate a professional marketing image for: {prompt_text}")
-    return response
-
-# --- 2. Email Setup ---
-def send_automated_email(sender, password, receiver, subject, body, attachment_path=None):
+# --- Updated Office 365 Email Function ---
+def send_automated_email_o365(sender, password, receiver, subject, body, attachment_path=None):
     msg = EmailMessage()
     msg['Subject'] = subject
     msg['From'] = sender
@@ -30,65 +17,31 @@ def send_automated_email(sender, password, receiver, subject, body, attachment_p
     if attachment_path and os.path.exists(attachment_path):
         with open(attachment_path, 'rb') as f:
             file_data = f.read()
-            msg.add_attachment(file_data, maintype='application', subtype='octet-stream', filename=attachment_path)
+            # Office 365 is picky about mime types; 'application/octet-stream' is a safe bet
+            msg.add_attachment(file_data, maintype='application', subtype='octet-stream', filename=os.path.basename(attachment_path))
 
-    # Send the email
-    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-        smtp.login(sender, password)
-        smtp.send_message(msg)
+    # --- OFFICE 365 SMTP SETTINGS ---
+    # Server: smtp.office365.com | Port: 587
+    try:
+        with smtplib.SMTP('smtp.office365.com', 587) as smtp:
+            smtp.ehlo()         # Identify ourselves to the server
+            smtp.starttls()     # Secure the connection
+            smtp.ehlo()         # Re-identify ourselves over the encrypted connection
+            smtp.login(sender, password)
+            smtp.send_message(msg)
+    except Exception as e:
+        raise Exception(f"Mail Error: {str(e)}")
 
-# --- 3. Streamlit Interface ---
-st.set_page_config(page_title="Gemini Outreach Pro", layout="wide")
-st.title("🚀 AI Business Outreach Dashboard")
+# --- Streamlit Interface Updates ---
+st.title("🚀 AI Business Outreach (Office 365 Edition)")
 
 with st.sidebar:
-    st.header("🔑 Credentials")
-    sender_email = st.text_input("Your Gmail")
-    app_password = st.text_input("Gmail App Password", type="password")
+    st.header("🔑 Microsoft Credentials")
+    sender_email = st.text_input("Your O365 Email (e.g., name@company.com)")
+    app_password = st.text_input("App Password", type="password")
     gemini_key = st.text_input("Gemini API Key", type="password")
-    st.info("Get your key at aistudio.google.com")
+    st.info("💡 Note: Office 365 requires SMTP Auth to be enabled in your Admin Center.")
 
-st.header("1. Upload Your Business List")
-uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    st.dataframe(df)
-
-    st.header("2. Customize Messaging")
-    email_subject = st.text_input("Subject line", "A gift for {Business Name}")
-    email_body = st.text_area("Message Body", "Hi {Business Name}, we generated this custom visual for you!")
-
-    if st.button("🚀 Start Bulk Emailing"):
-        if not (sender_email and app_password and gemini_key):
-            st.error("Missing credentials in the sidebar!")
-        else:
-            for index, row in df.iterrows():
-                try:
-                    # Personalize content from CSV columns
-                    target_email = row['Email']
-                    biz_name = row['Business Name']
-                    img_prompt = row.get('Prompt', f"A professional logo for {biz_name}")
-                    
-                    # 1. AI Image Generation (Visualizing the process)
-                    st.write(f"🎨 Generating image for {biz_name}...")
-                    # (In a real scenario, you'd save the AI output to a file here)
-                    
-                    # 2. Send Email
-                    formatted_subject = email_subject.replace("{Business Name}", biz_name)
-                    formatted_body = email_body.replace("{Business Name}", biz_name)
-                    
-                    send_automated_email(
-                        sender_email, 
-                        app_password, 
-                        target_email, 
-                        formatted_subject, 
-                        formatted_body,
-                        attachment_path=row.get('File') # Optional file column
-                    )
-                    st.success(f"✅ Sent to {biz_name} ({target_email})")
-                
-                except Exception as e:
-                    st.error(f"❌ Failed for {biz_name}: {e}")
-
-            st.balloons()
+# ... (rest of your CSV upload and AI generation logic stays the same) ...
+# When calling the function in your loop, use:
+# send_automated_email_o365(sender_email, app_password, target_email, formatted_subject, formatted_body)
