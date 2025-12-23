@@ -10,8 +10,8 @@ import google.generativeai as genai
 def generate_ai_image_bytes(api_key, prompt):
     try:
         genai.configure(api_key=api_key)
-        # 2025 Standard: Using imagen-3.0 for dedicated image generation
-        model = genai.GenerativeModel('imagen-3.0-generate-001') 
+        # 2025 Standard: Using imagen-2.5 for dedicated image generation
+        model = genai.GenerativeModel('gemini-2.5-flash-image') 
         result = model.generate_content(prompt)
         
         # FIX: Explicitly extracting bytes from the Gemini response candidates
