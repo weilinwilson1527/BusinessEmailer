@@ -125,6 +125,7 @@ if uploaded_csv:
             bar = st.progress(0)
             for i, row in df.iterrows():
                 biz = str(row.get('Business Name', 'Client'))
+                loc = str(row.get('Location',''))
                 target = str(row.get('Email', ''))
                 
                 # Get Image for this specific row
@@ -138,7 +139,7 @@ if uploaded_csv:
                 success = send_o365_email(
                     sender_email, app_password, target,
                     subject_temp.replace("{Business Name}", biz),
-                    body_temp.replace("{Business Name}", biz),
+                    body_temp.replace("{Business Name}", biz).replace("{Location}",loc),
                     manual_file=manual_doc,
                     image_data=current_img
                 )
